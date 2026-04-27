@@ -14,7 +14,6 @@ SCOPES = ['https://www.googleapis.com/auth/drive']
 
 st.set_page_config(page_title="나만의 교육 자료실", page_icon="📚", layout="wide")
 
-# CSS: 탐색기 버튼을 글자처럼 깔끔하게 보이고 간격을 조절합니다.
 st.markdown("""
     <style>
     .stButton>button { 
@@ -37,7 +36,6 @@ st.markdown("""
         color: #ff4b4b !important;
     }
     [data-testid="stExpander"] { border: 1px solid #e6e6e6; border-radius: 5px; margin-bottom: 10px; }
-    /* 입력 칸 사이의 여백을 약간 줄입니다 */
     [data-testid="stVerticalBlock"] > div { padding-bottom: 0px; }
     </style>
     """, unsafe_allow_html=True)
@@ -53,7 +51,6 @@ def get_drive_service():
         st.error(f"구글 인증 실패: {e}")
         return None
 
-# --- 폴더 & 파일 제어 함수 ---
 @st.cache_data(ttl=300)
 def get_folders_in_parent(_service, parent_id):
     query = f"'{parent_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
@@ -100,11 +97,10 @@ if service:
     col_left, col_center, col_right = st.columns([1.3, 2.0, 1.2], gap="large")
 
     # ---------------------------------------------------------
-    # ⬅️ [왼쪽] 새 폴더 생성(2단 배열) & 파일 트리
+    # ⬅️ [왼쪽] 새 폴더 생성 & 파일 트리
     # ---------------------------------------------------------
     with col_left:
         with st.expander("🆕 새 폴더 만들기", expanded=False):
-            # 한 줄에 두 개씩 배치
             row1_col1, row1_col2 = st.columns(2)
             with row1_col1: year = st.selectbox("연도", ["2025", "2026", "2027"], index=1)
             with row1_col2: grade = st.selectbox("학년", ["1학년", "2학년", "3학년", "4학년", "5학년", "6학년"], index=4)
@@ -115,19 +111,38 @@ if service:
             
             row3_col1, row3_col2 = st.columns(2)
             with row3_col1: period = st.text_input("차시", placeholder="예: 2차시")
-            with row3_col2: st.write(""); st.write("") # 버튼 위치를 맞추기 위한 여백
+            with row3_col2: st.write(""); st.write("") 
             
             if st.button("➕ 폴더 생성"):
                 with st.spinner("생성 중..."):
+                    # 1. 폴더 생성 작업
                     f1 = get_or_create_folder(service, f"{year}학년도", TARGET_FOLDER_ID)
                     f2 = get_or_create_folder(service, grade, f1)
                     f3 = get_or_create_folder(service, subject, f2)
-                    if unit: f4 = get_or_create_folder(service, unit, f3)
-                    if unit and period: get_or_create_folder(service, period, f4)
+                    
+                    target_id = f3
+                    target_name = subject
+                    
+                    if unit: 
+                        f4 = get_or_create_folder(service, unit, f3)
+                        target_id = f4
+                        target_name = unit
+                    if unit and period: 
+                        f5 = get_or_create_folder(service, period, f4)
+                        target_id = f5
+                        target_name = period
+                    
+                    # 2. ⚡ 방금 만든 폴더로 현재 위치 자동 변경! ⚡
+                    st.session_state.current_folder_id = target_id
+                    st.session_state.current_folder_name = target_name
+                    
+                    # 3. 왼쪽 트리에서도 해당 폴더 경로까지 자동으로 열리게 세팅
+                    st.session_state.expanded_folders.update([TARGET_FOLDER_ID, f1, f2, f3])
+                    if unit: st.session_state.expanded_folders.add(f4)
+                    if unit and period: st.session_state.expanded_folders.add(f5)
                     
                     get_folders_in_parent.clear()
-                    st.success("완료!")
-                    st.rerun()
+                    st.rerun() # 완료 즉시 화면 새로고침
 
         def render_tree(parent_id, depth=0):
             folders = get_folders_in_parent(service, parent_id)
