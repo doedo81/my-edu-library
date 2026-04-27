@@ -35,7 +35,7 @@ st.markdown("""
         background-color: transparent !important;
         color: #ff4b4b !important;
     }
-    [data-testid="stExpander"] { border: 1px solid #e6e6e6; border-radius: 5px; margin-bottom: 10px; }
+    [data-testid="stExpander"] { border: 1px solid #444; border-radius: 5px; margin-bottom: 10px; }
     [data-testid="stVerticalBlock"] > div { padding-bottom: 0px; }
     </style>
     """, unsafe_allow_html=True)
@@ -77,7 +77,6 @@ def upload_to_drive(service, folder_id, file_name, file_content):
     media = MediaIoBaseUpload(io.BytesIO(file_content), mimetype='application/octet-stream', resumable=True)
     service.files().create(body=file_metadata, media_body=media, fields='id').execute()
 
-# --- 상태 저장소 초기화 ---
 if 'expanded_folders' not in st.session_state:
     st.session_state.expanded_folders = {TARGET_FOLDER_ID}
 if 'current_folder_id' not in st.session_state:
@@ -115,49 +114,44 @@ if service:
             
             if st.button("➕ 폴더 생성"):
                 with st.spinner("생성 중..."):
-                    # 1. 폴더 생성 작업
                     f1 = get_or_create_folder(service, f"{year}학년도", TARGET_FOLDER_ID)
                     f2 = get_or_create_folder(service, grade, f1)
                     f3 = get_or_create_folder(service, subject, f2)
-                    
-                    target_id = f3
-                    target_name = subject
+                    target_id, target_name = f3, subject
                     
                     if unit: 
                         f4 = get_or_create_folder(service, unit, f3)
-                        target_id = f4
-                        target_name = unit
+                        target_id, target_name = f4, unit
                     if unit and period: 
                         f5 = get_or_create_folder(service, period, f4)
-                        target_id = f5
-                        target_name = period
+                        target_id, target_name = f5, period
                     
-                    # 2. ⚡ 방금 만든 폴더로 현재 위치 자동 변경! ⚡
                     st.session_state.current_folder_id = target_id
                     st.session_state.current_folder_name = target_name
                     
-                    # 3. 왼쪽 트리에서도 해당 폴더 경로까지 자동으로 열리게 세팅
                     st.session_state.expanded_folders.update([TARGET_FOLDER_ID, f1, f2, f3])
                     if unit: st.session_state.expanded_folders.add(f4)
                     if unit and period: st.session_state.expanded_folders.add(f5)
                     
                     get_folders_in_parent.clear()
-                    st.rerun() # 완료 즉시 화면 새로고침
+                    st.rerun()
 
         def render_tree(parent_id, depth=0):
             folders = get_folders_in_parent(service, parent_id)
             for folder in folders:
-                indent = "&nbsp;" * (depth * 4) 
+                indent = "&nbsp;" * (depth * 5) 
                 is_expanded = folder['id'] in st.session_state.expanded_folders
                 is_selected = (st.session_state.current_folder_id == folder['id'])
                 
-                icon = "📂" if is_expanded else "📁"
-                marker = "📍 " if is_selected else ""
+                # [+] 와 [-] 기호 적용
+                pm_icon = "➖" if is_expanded else "➕"
+                folder_icon = "📂" if is_expanded else "📁"
+                marker = "📍" if is_selected else ""
                 
                 if is_selected:
-                    label = f"{indent}{marker}{icon} **{folder['name']}**"
+                    label = f"{indent}{pm_icon} {folder_icon} **{folder['name']}** {marker}"
                 else:
-                    label = f"{indent}{marker}{icon} {folder['name']}"
+                    label = f"{indent}{pm_icon} {folder_icon} {folder['name']}"
                 
                 if st.button(label, key=f"tree_{folder['id']}"):
                     st.session_state.current_folder_id = folder['id']
@@ -170,7 +164,8 @@ if service:
                     render_tree(folder['id'], depth + 1)
 
         with st.expander("🌳 폴더 탐색기", expanded=True):
-            with st.container(height=500):
+            # border=False 로 설정하여 빨간 윤곽선 상자를 완전히 제거함!
+            with st.container(height=500, border=False):
                 render_tree(TARGET_FOLDER_ID)
 
     # ---------------------------------------------------------
@@ -203,7 +198,8 @@ if service:
     with col_right:
         st.subheader(f"💾 업로드 및 메모")
         
-        with st.container(border=True):
+        # 윤곽선 없앰 (깔끔한 이글 스타일)
+        with st.container(border=False):
             passed_url = st.query_params.get("url", "")
             url_input = st.text_input("🔗 참고 주소 (Ctrl+V)", value=passed_url)
             up_files = st.file_uploader("📂 파일 끌어다 놓기", accept_multiple_files=True)
