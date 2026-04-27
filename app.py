@@ -14,12 +14,32 @@ SCOPES = ['https://www.googleapis.com/auth/drive']
 
 st.set_page_config(page_title="나만의 교육 자료실", page_icon="📚", layout="wide")
 
-# 폴더 버튼들을 탐색기처럼 깔끔하게 보이게 하는 디자인 설정
+# CSS: 버튼의 네모 박스 윤곽선과 배경색을 완벽하게 없애서 그냥 글자처럼 보이게 만듭니다.
 st.markdown("""
     <style>
-    .stButton>button { text-align: left; width: 100%; border: none; background-color: transparent; box-shadow: none; padding-left: 0; padding-top: 2px; padding-bottom: 2px; }
-    .stButton>button:hover { background-color: #f0f2f6; color: #ff4b4b; }
-    .stButton>button:focus { background-color: #ffeaea; color: #ff4b4b; border: none; box-shadow: none;}
+    .stButton>button { 
+        text-align: left !important; 
+        width: 100% !important; 
+        border: none !important; 
+        background-color: transparent !important; 
+        box-shadow: none !important; 
+        padding: 2px 0px !important; 
+        color: inherit !important;
+    }
+    .stButton>button:hover { 
+        color: #ff4b4b !important; 
+        background-color: transparent !important;
+    }
+    .stButton>button:focus:not(:active) { 
+        border: none !important; 
+        box-shadow: none !important; 
+        background-color: transparent !important;
+        color: #ff4b4b !important;
+    }
+    .stButton>button:active {
+        background-color: transparent !important;
+        border: none !important;
+    }
     [data-testid="stExpander"] { border: 1px solid #e6e6e6; border-radius: 5px; margin-bottom: 10px; }
     </style>
     """, unsafe_allow_html=True)
@@ -79,15 +99,13 @@ st.write("---")
 service = get_drive_service()
 
 if service:
-    # 3단 분할 레이아웃
     col_left, col_center, col_right = st.columns([1.2, 2.0, 1.2], gap="large")
 
     # ---------------------------------------------------------
-    # ⬅️ [왼쪽] 폴더 체계 생성 & 파일 트리 (깔끔하게 정리됨)
+    # ⬅️ [왼쪽] 폴더 체계 생성 & 깔끔한 파일 트리
     # ---------------------------------------------------------
     with col_left:
-        # 1. 새 폴더 만들기 (접었다 펴기)
-        with st.expander("🆕 새 폴더 만들기", expanded=False): # 공간 확보를 위해 기본은 접어둠
+        with st.expander("🆕 새 폴더 만들기", expanded=False):
             year = st.selectbox("연도", ["2025", "2026", "2027"], index=1)
             grade = st.selectbox("학년", ["1학년", "2학년", "3학년", "4학년", "5학년", "6학년"], index=4)
             subject = st.selectbox("과목", ["국어", "수학", "사회", "과학", "영어", "창체", "기타"])
@@ -106,19 +124,21 @@ if service:
                     st.success("생성 완료!")
                     st.rerun()
 
-        # 2. 폴더 탐색 트리 (안내문구 및 최상위 버튼 제거, 접기 기능 추가)
         def render_tree(parent_id, depth=0):
             folders = get_folders_in_parent(service, parent_id)
             for folder in folders:
-                indent = "　" * depth 
+                indent = "&nbsp;" * (depth * 4) # 들여쓰기 처리
                 is_expanded = folder['id'] in st.session_state.expanded_folders
                 is_selected = (st.session_state.current_folder_id == folder['id'])
                 
                 icon = "📂" if is_expanded else "📁"
                 marker = "📍 " if is_selected else ""
-                font_weight = "**" if is_selected else ""
                 
-                label = f"{indent}{marker}{icon} {font_weight}{folder['name']}{font_weight}"
+                # 선택된 폴더는 배경 박스 없이 글씨만 진하게(Bold) 표시
+                if is_selected:
+                    label = f"{indent}{marker}{icon} **{folder['name']}**"
+                else:
+                    label = f"{indent}{marker}{icon} {folder['name']}"
                 
                 if st.button(label, key=f"tree_{folder['id']}"):
                     st.session_state.current_folder_id = folder['id']
@@ -134,7 +154,6 @@ if service:
                     render_tree(folder['id'], depth + 1)
 
         with st.expander("🌳 폴더 탐색기", expanded=True):
-            # 높이를 450으로 제한하여 한 화면에 깔끔하게 들어오도록 설정
             with st.container(height=450):
                 render_tree(TARGET_FOLDER_ID)
 
@@ -166,10 +185,35 @@ if service:
                 st.warning("이 파일 형식은 보안상 직접 열어야 합니다. 위 링크를 클릭하세요.")
 
     # ---------------------------------------------------------
-    # ➡️ [오른쪽] 입력 폼 (업로드 / 주소 붙여넣기 / 메모 / 저장)
+    # ➡️ [오른쪽] 입력 폼 (오타 수정 완료 구역)
     # ---------------------------------------------------------
     with col_right:
         st.subheader(f"💾 업로드 및 메모")
         
         with st.container(border=True):
-            passed_
+            passed_url = st.query_params.get("url", "") # ✅ 오타(passed_) 완벽 수정됨!
+            url_input = st.text_input("🔗 참고 주소 (Ctrl+V)", value=passed_url)
+            
+            up_files = st.file_uploader("📂 파일 끌어다 놓기", accept_multiple_files=True)
+            
+            memo = st.text_area("📝 수업 메모", height=120)
+            
+        st.write("")
+        
+        if st.button("🚀 현재 폴더에 전송하기", type="primary", use_container_width=True):
+            if not up_files and not url_input and not memo:
+                st.warning("자료나 링크를 먼저 넣어주세요.")
+            else:
+                with st.spinner(f"[{st.session_state.current_folder_name}]에 저장 중..."):
+                    try:
+                        if up_files:
+                            for f in up_files:
+                                upload_to_drive(service, st.session_state.current_folder_id, f.name, f.getvalue())
+                        if url_input or memo:
+                            note_text = f"🔗 링크: {url_input}\n\n📝 메모:\n{memo}"
+                            upload_to_drive(service, st.session_state.current_folder_id, "학습자료_및_메모.txt", note_text.encode('utf-8'))
+                        
+                        st.success("✨ 업로드 완료!")
+                        st.rerun() 
+                    except Exception as e:
+                        st.error(f"오류: {e}")
