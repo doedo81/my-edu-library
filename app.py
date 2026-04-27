@@ -14,7 +14,7 @@ SCOPES = ['https://www.googleapis.com/auth/drive']
 
 st.set_page_config(page_title="나만의 교육 자료실", page_icon="📚", layout="wide")
 
-# CSS: 버튼의 네모 박스 윤곽선과 배경색을 완벽하게 없애서 그냥 글자처럼 보이게 만듭니다.
+# CSS: 탐색기 버튼을 글자처럼 깔끔하게 보이고 간격을 조절합니다.
 st.markdown("""
     <style>
     .stButton>button { 
@@ -36,11 +36,9 @@ st.markdown("""
         background-color: transparent !important;
         color: #ff4b4b !important;
     }
-    .stButton>button:active {
-        background-color: transparent !important;
-        border: none !important;
-    }
     [data-testid="stExpander"] { border: 1px solid #e6e6e6; border-radius: 5px; margin-bottom: 10px; }
+    /* 입력 칸 사이의 여백을 약간 줄입니다 */
+    [data-testid="stVerticalBlock"] > div { padding-bottom: 0px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -99,21 +97,28 @@ st.write("---")
 service = get_drive_service()
 
 if service:
-    col_left, col_center, col_right = st.columns([1.2, 2.0, 1.2], gap="large")
+    col_left, col_center, col_right = st.columns([1.3, 2.0, 1.2], gap="large")
 
     # ---------------------------------------------------------
-    # ⬅️ [왼쪽] 폴더 체계 생성 & 깔끔한 파일 트리
+    # ⬅️ [왼쪽] 새 폴더 생성(2단 배열) & 파일 트리
     # ---------------------------------------------------------
     with col_left:
         with st.expander("🆕 새 폴더 만들기", expanded=False):
-            year = st.selectbox("연도", ["2025", "2026", "2027"], index=1)
-            grade = st.selectbox("학년", ["1학년", "2학년", "3학년", "4학년", "5학년", "6학년"], index=4)
-            subject = st.selectbox("과목", ["국어", "수학", "사회", "과학", "영어", "창체", "기타"])
-            unit = st.text_input("단원", placeholder="예: 3단원 우리 이웃")
-            period = st.text_input("차시", placeholder="예: 2차시")
+            # 한 줄에 두 개씩 배치
+            row1_col1, row1_col2 = st.columns(2)
+            with row1_col1: year = st.selectbox("연도", ["2025", "2026", "2027"], index=1)
+            with row1_col2: grade = st.selectbox("학년", ["1학년", "2학년", "3학년", "4학년", "5학년", "6학년"], index=4)
             
-            if st.button("➕ 이 체계로 폴더 생성"):
-                with st.spinner("폴더 생성 중..."):
+            row2_col1, row2_col2 = st.columns(2)
+            with row2_col1: subject = st.selectbox("과목", ["국어", "수학", "사회", "과학", "영어", "창체", "기타"])
+            with row2_col2: unit = st.text_input("단원", placeholder="예: 3단원")
+            
+            row3_col1, row3_col2 = st.columns(2)
+            with row3_col1: period = st.text_input("차시", placeholder="예: 2차시")
+            with row3_col2: st.write(""); st.write("") # 버튼 위치를 맞추기 위한 여백
+            
+            if st.button("➕ 폴더 생성"):
+                with st.spinner("생성 중..."):
                     f1 = get_or_create_folder(service, f"{year}학년도", TARGET_FOLDER_ID)
                     f2 = get_or_create_folder(service, grade, f1)
                     f3 = get_or_create_folder(service, subject, f2)
@@ -121,20 +126,19 @@ if service:
                     if unit and period: get_or_create_folder(service, period, f4)
                     
                     get_folders_in_parent.clear()
-                    st.success("생성 완료!")
+                    st.success("완료!")
                     st.rerun()
 
         def render_tree(parent_id, depth=0):
             folders = get_folders_in_parent(service, parent_id)
             for folder in folders:
-                indent = "&nbsp;" * (depth * 4) # 들여쓰기 처리
+                indent = "&nbsp;" * (depth * 4) 
                 is_expanded = folder['id'] in st.session_state.expanded_folders
                 is_selected = (st.session_state.current_folder_id == folder['id'])
                 
                 icon = "📂" if is_expanded else "📁"
                 marker = "📍 " if is_selected else ""
                 
-                # 선택된 폴더는 배경 박스 없이 글씨만 진하게(Bold) 표시
                 if is_selected:
                     label = f"{indent}{marker}{icon} **{folder['name']}**"
                 else:
@@ -143,18 +147,15 @@ if service:
                 if st.button(label, key=f"tree_{folder['id']}"):
                     st.session_state.current_folder_id = folder['id']
                     st.session_state.current_folder_name = folder['name']
-                    
-                    if is_expanded:
-                        st.session_state.expanded_folders.remove(folder['id'])
-                    else:
-                        st.session_state.expanded_folders.add(folder['id'])
+                    if is_expanded: st.session_state.expanded_folders.remove(folder['id'])
+                    else: st.session_state.expanded_folders.add(folder['id'])
                     st.rerun()
                 
                 if is_expanded:
                     render_tree(folder['id'], depth + 1)
 
         with st.expander("🌳 폴더 탐색기", expanded=True):
-            with st.container(height=450):
+            with st.container(height=500):
                 render_tree(TARGET_FOLDER_ID)
 
     # ---------------------------------------------------------
@@ -171,40 +172,35 @@ if service:
         else:
             st.write("**📄 폴더 내 자료 목록**")
             for f in files:
-                col_name, col_btn = st.columns([4, 1])
-                col_name.markdown(f"- [{f['name']}]({f['webViewLink']})")
-                if col_btn.button("미리보기", key=f"prev_{f['id']}"):
+                c_name, c_btn = st.columns([4, 1.2])
+                c_name.markdown(f"- [{f['name']}]({f['webViewLink']})")
+                if c_btn.button("미리보기", key=f"prev_{f['id']}"):
                     st.session_state.preview_url = f['webViewLink']
 
         if 'preview_url' in st.session_state:
             st.write("---")
             st.write("**👀 미리보기 창**")
-            try:
-                st.components.v1.iframe(st.session_state.preview_url, height=450, scrolling=True)
-            except:
-                st.warning("이 파일 형식은 보안상 직접 열어야 합니다. 위 링크를 클릭하세요.")
+            st.components.v1.iframe(st.session_state.preview_url, height=500, scrolling=True)
 
     # ---------------------------------------------------------
-    # ➡️ [오른쪽] 입력 폼 (오타 수정 완료 구역)
+    # ➡️ [오른쪽] 입력 폼 (업로드 / 주소 / 메모)
     # ---------------------------------------------------------
     with col_right:
         st.subheader(f"💾 업로드 및 메모")
         
         with st.container(border=True):
-            passed_url = st.query_params.get("url", "") # ✅ 오타(passed_) 완벽 수정됨!
+            passed_url = st.query_params.get("url", "")
             url_input = st.text_input("🔗 참고 주소 (Ctrl+V)", value=passed_url)
-            
             up_files = st.file_uploader("📂 파일 끌어다 놓기", accept_multiple_files=True)
-            
-            memo = st.text_area("📝 수업 메모", height=120)
+            memo = st.text_area("📝 수업 메모", height=150)
             
         st.write("")
         
         if st.button("🚀 현재 폴더에 전송하기", type="primary", use_container_width=True):
             if not up_files and not url_input and not memo:
-                st.warning("자료나 링크를 먼저 넣어주세요.")
+                st.warning("자료나 링크를 넣어주세요.")
             else:
-                with st.spinner(f"[{st.session_state.current_folder_name}]에 저장 중..."):
+                with st.spinner("저장 중..."):
                     try:
                         if up_files:
                             for f in up_files:
@@ -212,8 +208,7 @@ if service:
                         if url_input or memo:
                             note_text = f"🔗 링크: {url_input}\n\n📝 메모:\n{memo}"
                             upload_to_drive(service, st.session_state.current_folder_id, "학습자료_및_메모.txt", note_text.encode('utf-8'))
-                        
-                        st.success("✨ 업로드 완료!")
+                        st.success("✨ 완료!")
                         st.rerun() 
                     except Exception as e:
                         st.error(f"오류: {e}")
